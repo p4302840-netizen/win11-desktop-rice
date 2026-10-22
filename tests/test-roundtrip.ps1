@@ -136,6 +136,14 @@ function Test-FakeRunning([string]$name, [string]$directory) {
         Where-Object { $_.Path -and (Split-Path $_.Path) -eq $directory })
 }
 
+# 诊断：桌面图标显示状态的两处记录（HideIcons 与桌面视图 FFlags），以及资源管理器进程
+function Write-DesktopState([string]$when) {
+    $hide = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -ErrorAction SilentlyContinue).HideIcons
+    $flags = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\Shell\Bags\1\Desktop' -ErrorAction SilentlyContinue).FFlags
+    $explorer = (Get-Process -Name explorer -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id)/会话$($_.SessionId)" }) -join '、'
+    Write-Host ("  [诊断 {0}] HideIcons={1} FFlags={2} 资源管理器={3}" -f $when, $hide, $(if ($null -ne $flags) { '0x{0:x}' -f $flags }), $explorer)
+}
+
 function Get-DockValue([string]$name) { return (Get-Item $docksKey).GetValue($name) }
 
 function Clear-Backup {
@@ -231,11 +239,13 @@ public static class FakeApp {
     New-OriginalTask
     Clear-Backup
     $baseline = Get-Snapshot
+    Write-DesktopState '基准'
     $dockBefore = @($baseline | Where-Object { $_ -match '\\Docks\\(1(Path|Label|StartPath|Type)\d+|DockNoItems1) ' })
     Write-Host "基准共 $($baseline.Count) 行，Dock 软件相关 $($dockBefore.Count) 行。"
 
     $run = Invoke-RepoScript 'install.ps1' '-Yes -KeepMyApps -Style ink'
     Assert-Condition ($run.Code -eq 0) 'install.ps1 退出码 0'
+    Write-DesktopState '安装后'
     Assert-StepTable $run @('1/3 调整任务栏和桌面', '2/3 导入 Nexus Dock', '3/3 Wallpaper Engine 开机自启', '切换壁纸风格') '成功'
 
     $advanced = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
@@ -263,6 +273,7 @@ public static class FakeApp {
 
     $run = Invoke-RepoScript 'restore.ps1'
     Assert-Condition ($run.Code -eq 0) 'restore.ps1 退出码 0'
+    foreach ($s in 0, 3, 6) { Start-Sleep -Seconds $s; Write-DesktopState "还原后+$s 秒" }
     Assert-StepTable $run @('还原壁纸和 Wallpaper Engine 配置', '还原任务栏和桌面', '还原 Nexus Dock', '还原 Wallpaper Engine 自启') '完成'
     Assert-SameSnapshot $baseline '还原后与安装前 0 差异'
     Assert-Condition (-not (Test-Path $iconDir)) '已删除生成的图标文件夹'

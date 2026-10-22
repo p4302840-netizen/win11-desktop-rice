@@ -1,5 +1,11 @@
 # 更新日志
 
+## 未发布
+
+- 新增 GitHub Actions 往返测试 `roundtrip.yml` 和 `tests/test-roundtrip.ps1`：在 `windows-latest` 虚拟机上模拟 Nexus、Wallpaper Engine 和已有同名计划任务，跑「安装 → 重复安装 → 还原」（`-KeepMyApps -Style ink` 与 `-ReplaceApps` 两种）和备份损坏的失败路径，还原后要求与安装前 0 差异。说明见 [指南](docs/GUIDE.md#自动往返测试github-虚拟机)。
+- 新增仅供测试的环境变量 `RICE_DIRECT=1`：`Start-Detached`、`Invoke-DesktopScript` 不经 Explorer 转交，直接执行；未设置时行为不变。
+- 重启资源管理器只处理当前会话；当前会话没有资源管理器时跳过重启，不再报错退出（原来 `Stop-Process` 找不到进程会让外观步骤失败）。
+
 ## v1.2.1 · 2026-10-22
 
 修复 AI 助手运行脚本时的两个问题：装完后壁纸和 Dock 被一起关掉；在打包的桌面 AI 应用里注册表改动只写进隔离区、真实桌面不生效。
