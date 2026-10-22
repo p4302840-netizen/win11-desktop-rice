@@ -5,6 +5,21 @@
 这些都是我自己真实遇到过的问题。文中的命令均在仓库根目录运行。
 
 <details>
+<summary><b>助手命令结束后 Dock / 壁纸消失，或隐藏 NeXuS 标志不生效</b></summary>
+
+常驻程序现在统一通过 `explorer.exe "程序路径"` 启动，并检查当前会话、安装目录内的进程是否出现；壁纸控制命令仍独立等待退出并检查退出码。
+
+本机还复现了另一种情况：受控终端与 Explorer 启动的普通 PowerShell 读到的 HKCU 配置不同。终端里的 `DockHideControlIcon1="True"` 不能证明桌面上的 Nexus 正在使用这份配置。正确字段仍是该字符串值，无需删除软件或换成别的注册表类型。
+
+`apply-nexus.ps1` 现在把备份、修改、还原整个事务交给 Explorer 启动的普通用户工作进程，回传日志和退出码。每次改动前另存带时间戳的完整 WinSTEP 注册表；`-KeepMyApps` 同时保留真实桌面的软件列表和数量。等待超时会保留工作目录并提示不要重复运行，先检查日志。
+
+这项修复已在本机进行显示／隐藏对照、冷启动、导入和还原检查；仍需在其他环境核对实际画面。已有旧备份可能来自另一注册表视图，请勿仅凭字段相同就导入。
+
+可运行无桌面改动的回归检查：`powershell -ExecutionPolicy Bypass -File .\tests\test-desktop-launch.ps1`。
+
+</details>
+
+<details>
 <summary><b>开机后壁纸不出来，桌面是黑的/默认壁纸</b></summary>
 
 <br>

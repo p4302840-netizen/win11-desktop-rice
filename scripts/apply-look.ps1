@@ -7,9 +7,23 @@
     .\apply-look.ps1          应用设置（会先把当前设置备份到 backup\ 文件夹）
     .\apply-look.ps1 -Undo    恢复成运行脚本之前的设置
 #>
-param([switch]$Undo)
+param([switch]$Undo, [Parameter(DontShow = $true)][switch]$DesktopSession)
 
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\common.ps1"
+# HKCU 外观设置必须与 Explorer 使用同一视图；整个事务（含备份和 Undo）在桌面执行。
+if (-not $DesktopSession) {
+    try {
+        $code = Invoke-DesktopScript -ScriptPath $PSCommandPath -Parameters @{
+            Undo = [bool]$Undo; DesktopSession = $true
+        }
+        exit $code
+    } catch {
+        Write-Host "外观桌面操作失败：$($_.Exception.Message)"
+        exit 1
+    }
+}
+
 $backupDir  = Join-Path $PSScriptRoot '..\backup'
 $backupFile = Join-Path $backupDir 'look-backup.json'
 
@@ -64,7 +78,8 @@ function Restart-Explorer {
     Stop-Process -Name explorer -Force
     Start-Sleep -Seconds 2
     if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) {
-        Start-Process explorer
+        # 仅在系统未自动恢复桌面 shell 时引导启动；此时没有现存 Explorer 可转交。
+        Start-Process -FilePath "$env:WINDIR\explorer.exe" -WindowStyle Hidden
         Start-Sleep -Seconds 2
     }
 
@@ -74,12 +89,12 @@ function Restart-Explorer {
             if (Get-Process -Name $tool.Name -ErrorAction SilentlyContinue |
                 Where-Object { $_.SessionId -eq $sessionId }) { continue }
             if ($tool.AppID) {
-                Start-Process -FilePath "shell:AppsFolder\$($tool.AppID)" -ErrorAction Stop
+                Start-Detached -AppID $tool.AppID -ProcessName $tool.Name
             } else {
-                Start-Process -FilePath $tool.Path -ErrorAction Stop
+                Start-Detached -FilePath $tool.Path -ProcessName $tool.Name
             }
         } catch {
-            Write-Host "无法恢复任务栏工具 $($tool.Name)，请手动启动：$($_.Exception.Message)"
+            throw "无法恢复任务栏工具 $($tool.Name)，请手动启动：$($_.Exception.Message)"
         }
     }
 }

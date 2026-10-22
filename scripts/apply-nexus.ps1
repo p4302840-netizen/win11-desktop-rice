@@ -14,10 +14,23 @@
     .\apply-nexus.ps1 -KeepMyApps    导入并保留你自己的软件
     .\apply-nexus.ps1 -Undo          恢复成导入之前的样子
 #>
-param([switch]$Undo, [switch]$KeepMyApps)
+param([switch]$Undo, [switch]$KeepMyApps, [Parameter(DontShow = $true)][switch]$DesktopSession)
 
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\common.ps1"
+
+# 注册表必须与 Explorer 启动的 Nexus 使用同一视图；工作进程不再转发。
+if (-not $DesktopSession) {
+    try {
+        $code = Invoke-DesktopScript -ScriptPath $PSCommandPath -Parameters @{
+            Undo = [bool]$Undo; KeepMyApps = [bool]$KeepMyApps; DesktopSession = $true
+        }
+        exit $code
+    } catch {
+        Write-Host "Nexus 桌面操作失败：$($_.Exception.Message)"
+        exit 1
+    }
+}
 
 $regKey     = 'HKCU\Software\WinSTEP2000\NeXuS'      # 只备份和还原 Nexus 自己的这一块
 $nexusKey   = 'HKCU:\Software\WinSTEP2000\NeXuS'
@@ -48,18 +61,33 @@ function Get-UnifiedIcon([string]$source) {
 
 function Stop-Nexus {
     # 直接结束进程，避免 Nexus 退出时把旧设置写回注册表
-    Get-Process -Name Nexus -ErrorAction SilentlyContinue | Stop-Process -Force
-    Start-Sleep -Seconds 1
+    $session = (Get-Process -Id $PID).SessionId
+    $processes = @(Get-Process -Name Nexus -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
+    foreach ($process in $processes) {
+        $null = $process.Handle
+        Stop-Process -Id $process.Id -Force
+        if (-not $process.WaitForExit(10000)) { throw 'Nexus 未能退出，已停止写入配置。' }
+    }
 }
 
 function Start-Nexus {
-    if ($nexusExe) { Start-Process $nexusExe; Write-Host 'Nexus 已重新启动。' }
+    if ($nexusExe) { Start-Detached -FilePath $nexusExe -ProcessName Nexus }
 }
 
 # reg.exe 会把"操作成功"写到错误输出，PowerShell 5.1 会误判成出错，所以交给 cmd 执行
 function Invoke-Reg([string]$arguments) {
     cmd /c "reg $arguments >nul 2>&1"
     return ($LASTEXITCODE -eq 0)
+}
+
+# 每次写入或还原前，另存整个 WinSTEP 当前状态，不覆盖首次安装备份。
+function Backup-Winstep {
+    New-Item -ItemType Directory -Force $backupDir | Out-Null
+    $current = Join-Path $backupDir ("winstep-before-change-{0}.reg" -f (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
+    if (-not (Invoke-Reg "export HKCU\Software\WinSTEP2000 `"$current`"")) {
+        throw '备份 WinSTEP 注册表失败，已停止，什么都没改。'
+    }
+    Write-Host "当前桌面的 WinSTEP 配置已备份到 $current"
 }
 
 if ($Undo) {
@@ -69,6 +97,7 @@ if ($Undo) {
         exit 1
     }
 
+    Backup-Winstep
     Stop-Nexus
     # 先把当前状态另存一份，万一导入失败还能退回来
     $current = Join-Path $backupDir 'nexus-before-undo.reg'
@@ -153,6 +182,7 @@ if (-not $themeFound) {
 }
 
 try {
+    Backup-Winstep
     Stop-Nexus
 
     if ($themeFound) {
@@ -161,6 +191,8 @@ try {
         }
     }
     foreach ($p in $config.dock.PSObject.Properties) {
+        # 保留软件时也保留实际数量，不能套用作者电脑的最后序号。
+        if ($KeepMyApps -and $p.Name -eq 'DockNoItems1') { continue }
         $value = Convert-ThemePath ([string]$p.Value)
         # 主题缺失时，不写指向主题文件的设置，免得 Dock 背景变空白
         if (-not $themeFound -and $value -match '^[A-Za-z]:\\') { continue }

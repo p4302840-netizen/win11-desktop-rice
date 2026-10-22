@@ -22,7 +22,7 @@ try {
     $docksKey = 'HKCU:\Software\WinSTEP2000\NeXuS\Docks'
     if ($nexus -and -not (Test-Path $docksKey) -and $InstallNexus) {
         Write-Host '首次需要打开一次 Nexus；正在启动，最多等待 60 秒。请由用户处理首次运行提示。'
-        Start-Process -FilePath $nexus
+        Start-Detached -FilePath $nexus -ProcessName Nexus
         $deadline = (Get-Date).AddSeconds(60)
         while (-not (Test-Path $docksKey) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
     }

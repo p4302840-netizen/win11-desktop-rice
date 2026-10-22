@@ -1,5 +1,16 @@
 # 更新日志
 
+## v1.2.1 · 2026-10-22
+
+修复 AI 助手运行脚本时的两个问题：装完后壁纸和 Dock 被一起关掉；在打包的桌面 AI 应用里注册表改动只写进隔离区、真实桌面不生效。
+
+- 外观应用与 `-Undo` 通过 `Invoke-DesktopScript` 将备份、HKCU 写入、重启 Explorer 和恢复 TranslucentTB 的完整事务交给桌面工作进程；隐藏的 `-DesktopSession` 开关防止循环转交。
+- 共享 Nexus 外观配置与导出过滤名单排除 `DockNoItems1`（作者电脑的最后图标序号），避免导入后丢图标或出现空位；保留 `KeepMyApps` 的防御性跳过逻辑。
+- AI 安装说明补充 HKCU 隔离和 Explorer 视图验证要求；新增 `tests/test-desktop-launch.ps1` 回归检查。
+- Nexus、Wallpaper Engine、TranslucentTB 统一经资源管理器启动，命令结束后不会被一起关掉；还原后不再残留 `wallpaper-config-before-undo.json`。
+- 重拍全部截图和动图：Dock 左侧不再有 NeXuS 标志。
+- 真机验证（以资源管理器看到的真实注册表为准）：`install.ps1 -Yes -KeepMyApps -Style ink` 后换一条命令检查，三个程序仍在运行、壁纸为水墨；`restore.ps1` 后 Dock、外观、计划任务、壁纸与安装前逐项对比 0 差异。
+
 ## v1.2.0 · 2026-10-22
 
 - 安装新增 `-Yes`、互斥的 `-KeepMyApps` / `-ReplaceApps`、`-Style`；无参数保留交互流程，不提问模式默认保留现有软件。

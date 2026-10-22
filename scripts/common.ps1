@@ -3,6 +3,97 @@
   各脚本共用的检测函数。不要直接运行，由其他脚本用 . "$PSScriptRoot\common.ps1" 引入。
 #>
 
+# 经资源管理器启动常驻程序，避免受控终端退出时连同子进程一起结束。
+function Start-Detached {
+    [CmdletBinding(DefaultParameterSetName = 'Executable')]
+    param(
+        [Parameter(Mandatory = $true, ParameterSetName = 'Executable')][string]$FilePath,
+        [Parameter(Mandatory = $true, ParameterSetName = 'Store')][string]$AppID,
+        [string[]]$ProcessName,
+        [int]$TimeoutSeconds = 15
+    )
+    $directory = $null
+    if ($AppID) {
+        if (-not $ProcessName) { throw '启动 Store 应用时必须指定进程名。' }
+        $target = "shell:AppsFolder\$AppID"
+    } else {
+        if (-not (Test-Path -LiteralPath $FilePath -PathType Leaf)) { throw "找不到程序：$FilePath" }
+        $target = (Get-Item -LiteralPath $FilePath).FullName
+        $directory = Split-Path $target
+        if (-not $ProcessName) { $ProcessName = @([IO.Path]::GetFileNameWithoutExtension($target)) }
+    }
+    $session = (Get-Process -Id $PID).SessionId
+    & "$env:WINDIR\explorer.exe" ('"' + $target + '"')
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $running = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue | Where-Object {
+            $_.SessionId -eq $session -and
+            (-not $directory -or ($_.Path -and (Split-Path $_.Path) -eq $directory))
+        })
+        if ($running.Count -gt 0) {
+            Write-Host "已通过 Explorer 启动 $target，PID：$(($running | ForEach-Object Id) -join '、')"
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $deadline)
+    throw "通过 Explorer 启动后，$TimeoutSeconds 秒内未检测到程序：$target"
+}
+
+# 受控环境和 Explorer 可能使用不同的 HKCU 视图。配置 Nexus 时交给普通桌面
+# PowerShell 执行整个事务（包括备份），不能只把程序启动移到 Explorer。
+function Invoke-DesktopScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [hashtable]$Parameters = @{},
+        [int]$TimeoutSeconds = 120
+    )
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('desktop-rice-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $work -ErrorAction Stop | Out-Null
+    $completed = $false
+    try {
+        @{ ScriptPath = (Get-Item -LiteralPath $ScriptPath -ErrorAction Stop).FullName; Parameters = $Parameters } |
+            ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $work 'request.json') -Encoding UTF8
+        $worker = @'
+$ErrorActionPreference = 'Stop'
+$code = 1
+try {
+    $request = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'request.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $parameters = @{}
+    foreach ($property in $request.Parameters.PSObject.Properties) { $parameters[$property.Name] = $property.Value }
+    $global:LASTEXITCODE = 0
+    & $request.ScriptPath @parameters *> (Join-Path $PSScriptRoot 'output.log')
+    $code = $LASTEXITCODE
+} catch {
+    $_ | Out-String | Add-Content -LiteralPath (Join-Path $PSScriptRoot 'output.log') -Encoding UTF8
+}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'exit-code.tmp'), [string]$code)
+Move-Item -LiteralPath (Join-Path $PSScriptRoot 'exit-code.tmp') -Destination (Join-Path $PSScriptRoot 'exit-code.txt')
+'@
+        $workerPath = Join-Path $work 'worker.ps1'
+        [IO.File]::WriteAllText($workerPath, $worker, [Text.UTF8Encoding]::new($true))
+        $shell = New-Object -ComObject WScript.Shell
+        $linkPath = Join-Path $work 'worker.lnk'
+        $link = $shell.CreateShortcut($linkPath)
+        $link.TargetPath = "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $link.Arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $workerPath + '"'
+        $link.WorkingDirectory = Split-Path $ScriptPath
+        $link.Save()
+        & "$env:WINDIR\explorer.exe" ('"' + $linkPath + '"')
+        $result = Join-Path $work 'exit-code.txt'
+        $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+        while (-not (Test-Path -LiteralPath $result)) {
+            if ((Get-Date) -ge $deadline) { throw "桌面工作进程未返回，可能仍在执行；请勿重复运行。检查：$work" }
+            Start-Sleep -Milliseconds 500
+        }
+        $completed = $true
+        $log = Join-Path $work 'output.log'
+        if (Test-Path -LiteralPath $log) { Write-Host (Get-Content -LiteralPath $log -Raw) }
+        return [int](Get-Content -LiteralPath $result -Raw)
+    } finally {
+        if ($completed) { Remove-Item -LiteralPath $work -Recurse -Force }
+    }
+}
+
 # 所有 Steam 库文件夹（主目录 + libraryfolders.vdf 里登记的其他盘）
 function Get-SteamLibraries {
     $steam = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath

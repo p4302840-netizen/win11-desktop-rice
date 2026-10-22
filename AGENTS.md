@@ -42,6 +42,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\set-style.ps1 -Style ink
 
 ## 怎么判断成功
 
+- 受控环境（如打包的桌面 AI 应用）里的 HKCU 可能被隔离，脚本已自动转交桌面进程；验证时请以 Explorer 视图为准（可用 reg export 经 explorer 启动的批处理读取）。
 - 每次外部 PowerShell 命令结束后检查 `$LASTEXITCODE`，不要把打开链接或看到输出当成成功。
 - 安装结果表每个预期步骤应为「成功」；「跳过」表示未完成该项，即便整体退出码为 0 也不能宣称全装好了。1 表示执行失败，2 表示风格步骤需要用户处理；混合错误优先返回 1。
 - 风格脚本的 0 仅表示控制命令正常返回，2 表示缺少软件、配置或下载，1 表示备份、进程或命令失败。

@@ -81,10 +81,12 @@ try {
             Copy-Item -LiteralPath $configFile -Destination (Join-Path $backupDir 'wallpaper-config-before-undo.json') -Force
         }
         Copy-Item -LiteralPath $snapshot -Destination $configFile -Force
-        Start-Process -FilePath $exe -WorkingDirectory $directory
+        Start-Detached -FilePath $exe -ProcessName wallpaper32, wallpaper64
         # 先移除状态，再清理快照，避免清理中断后留下指向缺失快照的有效记录。
         Remove-Item -LiteralPath $stateFile
         Remove-Item -LiteralPath $snapshot
+        $beforeUndo = Join-Path $backupDir 'wallpaper-config-before-undo.json'
+        if (Test-Path -LiteralPath $beforeUndo) { Remove-Item -LiteralPath $beforeUndo }
         Write-Host '已恢复切换前的完整配置并重新启动；请核对原壁纸和各显示器。'
         exit 0
     }
@@ -94,7 +96,7 @@ try {
     if (-not $project) {
         $url = "steam://url/CommunityFilePage/$id"
         Write-Host "请用户在 Steam 页面亲自点「订阅」，等待下载完成：$url"
-        Start-Process $url
+        & "$env:WINDIR\explorer.exe" $url
         if (-not $NoWait) {
             $deadline = (Get-Date).AddMinutes(3)
             while (-not $project -and (Get-Date) -lt $deadline) {
@@ -132,7 +134,7 @@ try {
         } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $stateFile -Encoding UTF8
     }
     # 先启动引擎，避免控制命令成为常驻进程；控制命令有独立的超时检查。
-    Start-Process -FilePath $exe -WorkingDirectory $directory
+    Start-Detached -FilePath $exe -ProcessName wallpaper32, wallpaper64
     Start-Sleep -Seconds 3
     $control = Start-Process -FilePath $exe -WorkingDirectory $directory -ArgumentList @(
         '-control', 'openWallpaper', '-file', ('"' + $project + '"')

@@ -16,8 +16,8 @@ $outFile  = Join-Path $PSScriptRoot '..\config\nexus-dock.json'
 
 if (-not (Test-Path $docksKey)) { Write-Host '没有找到 Nexus 的配置，请先运行一次 Nexus。'; exit 1 }
 
-# 跟屏幕分辨率或这台电脑绑定的设置，不导出
-$skip = 'DockPosX1', 'DockPosY1', 'DockEnabledPosX1', 'DockEnabledPosY1', 'DockNSID1', 'DockName1'
+# 跟屏幕分辨率、这台电脑或软件列表绑定的设置，不导出（DockNoItems1 是最后图标序号）
+$skip = 'DockPosX1', 'DockPosY1', 'DockEnabledPosX1', 'DockEnabledPosY1', 'DockNSID1', 'DockName1', 'DockNoItems1'
 
 $docks = Get-Item $docksKey
 $dock = [ordered]@{}
