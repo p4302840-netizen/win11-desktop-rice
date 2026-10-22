@@ -3,9 +3,9 @@
   各脚本共用的检测函数。不要直接运行，由其他脚本用 . "$PSScriptRoot\common.ps1" 引入。
 
   仅供自动测试：环境变量 RICE_DIRECT=1 时，Start-Detached 和 Invoke-DesktopScript
-  不经 explorer.exe 转交，直接在当前进程/会话执行。GitHub Actions 虚拟机上没有可靠的
-  用户桌面 Explorer，只能这样跑往返测试。用户电脑上不要设置它：直接执行就失去了
-  绕开注册表隔离和进程回收的保护。
+  不经 explorer.exe 转交，直接在当前进程/会话执行。GitHub Actions 虚拟机的 Explorer
+  是否在当前会话、何时被重启都不受控制，往返测试用它避免受镜像变化影响。用户电脑上
+  不要设置它：直接执行就失去了绕开注册表隔离和进程回收的保护。
 #>
 
 # 是否处于测试用的直接执行模式（见文件开头说明）。

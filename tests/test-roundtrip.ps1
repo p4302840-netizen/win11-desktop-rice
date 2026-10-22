@@ -10,7 +10,7 @@
     - 假 Wallpaper Engine：Steam 路径、wallpaper32.exe、config.json 和水墨壁纸的 project.json
     - 已有同名计划任务 WallpaperEngine_Logon（指向记事本）
 
-  需要环境变量 RICE_DIRECT=1（见 scripts/common.ps1 开头）：虚拟机上没有可靠的桌面 Explorer。
+  需要环境变量 RICE_DIRECT=1（见 scripts/common.ps1 开头）：不依赖虚拟机上的 Explorer 转交。
 #>
 $ErrorActionPreference = 'Stop'
 

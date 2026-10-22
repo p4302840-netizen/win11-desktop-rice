@@ -4,6 +4,7 @@
 
 - 新增 GitHub Actions 往返测试 `roundtrip.yml` 和 `tests/test-roundtrip.ps1`：在 `windows-latest` 虚拟机上模拟 Nexus、Wallpaper Engine 和已有同名计划任务，跑「安装 → 重复安装 → 还原」（`-KeepMyApps -Style ink` 与 `-ReplaceApps` 两种）和备份损坏的失败路径，还原后要求与安装前 0 差异。说明见 [指南](docs/GUIDE.md#自动往返测试github-虚拟机)。
 - 新增仅供测试的环境变量 `RICE_DIRECT=1`：`Start-Detached`、`Invoke-DesktopScript` 不经 Explorer 转交，直接执行；未设置时行为不变。
+- 修复还原后桌面图标仍然隐藏（往返测试发现）：资源管理器启动时会按桌面视图 `Shell\Bags\1\Desktop\FFlags` 的「不显示图标」位改写 `HideIcons`，只还原 `HideIcons` 会被改回去；`apply-look.ps1 -Undo` 现在把这一位一起设回原样，旧备份同样适用。
 - 重启资源管理器只处理当前会话；当前会话没有资源管理器时跳过重启，不再报错退出（原来 `Stop-Process` 找不到进程会让外观步骤失败）。
 
 ## v1.2.1 · 2026-10-22
