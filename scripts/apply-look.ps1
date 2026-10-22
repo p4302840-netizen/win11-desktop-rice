@@ -131,6 +131,15 @@ if ($Undo) {
         $rects = (Get-ItemProperty $stuckRects).Settings
         $rects[8] = [byte]$backup.TaskbarAutoHide
         Set-ItemProperty -Path $stuckRects -Name Settings -Value $rects
+        # 资源管理器启动时会按桌面视图的「不显示图标」位（FFlags 0x1000）改写 HideIcons，
+        # 只还原 HideIcons 的话图标仍是隐藏的（自动往返测试发现），所以把这一位也设回原样。
+        $desktopBag = 'HKCU:\Software\Microsoft\Windows\Shell\Bags\1\Desktop'
+        $flags = Get-Value $desktopBag 'FFlags'
+        if ($null -ne $flags) {
+            $wasHidden = @($backup.Items | Where-Object { $_.Name -eq 'HideIcons' -and $_.Value -eq 1 }).Count -gt 0
+            $flags = if ($wasHidden) { $flags -bor 0x1000 } else { $flags -band (-bnot 0x1000) }
+            Set-ItemProperty -Path $desktopBag -Name FFlags -Value $flags -Type DWord
+        }
         Restart-Explorer
         Remove-Item $backupFile
     } catch {

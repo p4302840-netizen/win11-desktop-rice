@@ -47,6 +47,8 @@ $snapshotKeys = @(
     @{ Path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'; Recurse = $false }
     @{ Path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'; Recurse = $false }
     @{ Path = $stuckRects; Recurse = $false }
+    # 桌面视图的「不显示图标」位，资源管理器启动时据此改写 HideIcons；其余值随图标位置变化，不比较
+    @{ Path = 'HKCU:\Software\Microsoft\Windows\Shell\Bags\1\Desktop'; Recurse = $false; Only = 'FFlags' }
 )
 # 运行时会自己变化、与脚本无关的值（「键\值名」的正则）。
 # 假 Nexus 不写注册表，所以 NeXuS 下暂时没有要排除的；换成真 Nexus 测试时在这里补充。
@@ -90,13 +92,14 @@ function Assert-StepTable($run, [string[]]$Steps, [string]$Expected) {
     }
 }
 
-function Get-RegistryLine([string]$Path, [bool]$Recurse) {
+function Get-RegistryLine([string]$Path, [bool]$Recurse, [string]$Only) {
     if (-not (Test-Path $Path)) { return "$Path <不存在>" }
     $keys = @(Get-Item $Path)
     if ($Recurse) { $keys += @(Get-ChildItem $Path -Recurse) }
     foreach ($key in $keys) {
         "$($key.Name)\"
         foreach ($name in $key.GetValueNames()) {
+            if ($Only -and $name -ne $Only) { continue }
             $id = "$($key.Name)\$name"
             if ($volatileValues | Where-Object { $id -match $_ }) { continue }
             $value = $key.GetValue($name, $null, 'DoNotExpandEnvironmentNames')
@@ -110,7 +113,7 @@ function Get-RegistryLine([string]$Path, [bool]$Recurse) {
 
 # 当前状态快照：注册表、计划任务 XML、Wallpaper Engine 配置的哈希
 function Get-Snapshot {
-    $lines = foreach ($k in $snapshotKeys) { Get-RegistryLine $k.Path $k.Recurse }
+    $lines = foreach ($k in $snapshotKeys) { Get-RegistryLine $k.Path $k.Recurse $k.Only }
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     if ($task) {
         $lines += (Export-ScheduledTask -TaskName $taskName) -split "`r?`n" | ForEach-Object { "任务XML: $_" }
