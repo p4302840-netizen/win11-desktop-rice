@@ -18,11 +18,11 @@ $scripts = Join-Path $PSScriptRoot 'scripts'
 $results = [System.Collections.Generic.List[object]]::new()
 
 # 运行一个子脚本，按它的退出码记录成功或失败
-function Invoke-Step([string]$name, [string]$script) {
+function Invoke-Step([string]$name, [string]$script, [hashtable]$scriptArgs = @{}) {
     Write-Host "`n== $name =="
     $global:LASTEXITCODE = 0
     try {
-        & "$scripts\$script"
+        & "$scripts\$script" @scriptArgs
         $ok = ($LASTEXITCODE -eq 0)
     } catch {
         Write-Host "出错：$($_.Exception.Message)"
@@ -49,16 +49,22 @@ if (Get-ScheduledTask -TaskName WallpaperEngine_Logon -ErrorAction SilentlyConti
 
 Write-Host "`n接下来会："
 Write-Host '  - 把任务栏改成深色并自动隐藏，隐藏桌面图标'
-if ($nexusExe) { Write-Host '  - 替换 Nexus 第一个 Dock 的外观和图标列表' }
+if ($nexusExe) { Write-Host '  - 导入 Nexus Dock 外观，把图标统一成同样大小（下一步会问你要不要保留现有软件）' }
 if ($weExe)    { Write-Host '  - 设置 Wallpaper Engine 登录后自动启动' }
 Write-Host "每一步都会先备份到 $PSScriptRoot\backup，请不要删除这个文件夹。"
 
 $answer = Read-Host "`n继续吗？(Y/N)"
 if ($answer -notmatch '^[Yy]') { Write-Host '已取消，什么都没改。'; exit 0 }
 
+$nexusArgs = @{}
+if ($nexusExe) {
+    $keep = Read-Host "`n保留你 Dock 上现有的软件，只统一图标样式吗？(Y = 保留 / N = 换成检测到的常用软件)"
+    if ($keep -match '^[Yy]') { $nexusArgs = @{ KeepMyApps = $true } }
+}
+
 Invoke-Step '1/3 调整任务栏和桌面' 'apply-look.ps1'
 
-if ($nexusExe) { Invoke-Step '2/3 导入 Nexus Dock' 'apply-nexus.ps1' }
+if ($nexusExe) { Invoke-Step '2/3 导入 Nexus Dock' 'apply-nexus.ps1' $nexusArgs }
 else { Skip-Step '2/3 导入 Nexus Dock' '没有安装 Nexus' }
 
 if ($weExe) { Invoke-Step '3/3 Wallpaper Engine 开机自启' 'fix-wallpaper-autostart.ps1' }

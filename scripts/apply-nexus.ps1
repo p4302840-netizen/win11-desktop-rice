@@ -1,15 +1,20 @@
 ﻿<#
   apply-nexus.ps1
   把 config\nexus-dock.json 里的 Dock 外观导入你的 Nexus，
-  并检测你电脑上是否装了几款常用软件（只查常见安装位置），装了的放到 Dock 上。
+  并把 Dock 上每个软件的原图标统一成同样的视觉大小。
 
-  注意：会替换第一个 Dock 上原有的图标列表。原配置会先备份，可以还原。
+  两种模式：
+    默认          检测你电脑上是否装了几款常用软件（只查常见安装位置），用它们替换第一个 Dock 的图标列表
+    -KeepMyApps   保留你 Dock 上现有的软件，只统一图标大小和外观
+
+  原配置会先备份，可以还原。图标从你电脑上的软件里提取，存在 %APPDATA%\NexusDock\win11-desktop-rice-icons。
 
   用法：
-    .\apply-nexus.ps1          导入（会先把你原来的 Nexus 配置备份到 backup\ 文件夹）
-    .\apply-nexus.ps1 -Undo    恢复成导入之前的样子
+    .\apply-nexus.ps1                导入并替换图标列表
+    .\apply-nexus.ps1 -KeepMyApps    导入并保留你自己的软件
+    .\apply-nexus.ps1 -Undo          恢复成导入之前的样子
 #>
-param([switch]$Undo)
+param([switch]$Undo, [switch]$KeepMyApps)
 
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\common.ps1"
@@ -20,7 +25,26 @@ $docksKey   = "$nexusKey\Docks"
 $configFile = Join-Path $PSScriptRoot '..\config\nexus-dock.json'
 $backupDir  = Join-Path $PSScriptRoot '..\backup'
 $backupFile = Join-Path $backupDir 'nexus-backup.reg'
+$iconDir    = Join-Path $env:APPDATA 'NexusDock\win11-desktop-rice-icons'
 $nexusExe   = Find-Nexus
+
+# 生成统一大小的图标，返回 PNG 路径；提取失败就沿用原来的图标，不影响导入
+function Get-UnifiedIcon([string]$source) {
+    if (-not $source -or -not (Test-Path $source)) { return $source }
+    # 已经是统一过的图标（重复运行时），直接沿用
+    if ($source.StartsWith($iconDir, [StringComparison]::OrdinalIgnoreCase)) { return $source }
+    try {
+        New-Item -ItemType Directory -Force $iconDir | Out-Null
+        $md5 = [Security.Cryptography.MD5]::Create()
+        $hash = -join ($md5.ComputeHash([Text.Encoding]::UTF8.GetBytes($source.ToLower())) | Select-Object -First 6 | ForEach-Object { $_.ToString('x2') })
+        $png = Join-Path $iconDir "$hash.png"
+        Export-AppIcon $source $png
+        return $png
+    } catch {
+        Write-Host "  图标处理失败，沿用原图标：$source"
+        return $source
+    }
+}
 
 function Stop-Nexus {
     # 直接结束进程，避免 Nexus 退出时把旧设置写回注册表
@@ -63,8 +87,11 @@ if ($Undo) {
         exit 1
     }
 
+    # 恢复出来的配置如果没用到导入时生成的图标，就把图标文件夹删掉
+    $stillUsed = Select-String -Path $backupFile -SimpleMatch 'win11-desktop-rice-icons' -Quiet
     Remove-Item $backupFile
     if ($hadKey) { Remove-Item $current }
+    if (-not $stillUsed) { Remove-Item $iconDir -Recurse -Force -ErrorAction SilentlyContinue }
     Start-Nexus
     Write-Host '已恢复原来的 Nexus 配置。'
     exit 0
@@ -140,21 +167,36 @@ try {
         Set-ItemProperty -Path $docksKey -Name $p.Name -Value $value -Type String
     }
 
-    # Dock 上的软件：先清掉第 1 个 Dock 原有的图标，再按检测结果写入
     $docks = Get-Item $docksKey
-    foreach ($name in $docks.GetValueNames()) {
-        if ($name -match '^1[A-Za-z]+\d+$') { Remove-ItemProperty -Path $docksKey -Name $name }
+    if ($KeepMyApps) {
+        # 保留现有软件，只把每个图标换成统一大小的版本
+        $last = [int]$docks.GetValue('DockNoItems1', -1)
+        $labels = @()
+        for ($i = 0; $i -le $last; $i++) {
+            $icon = $docks.GetValue("1IconPath$i")
+            if (-not $icon) { $icon = $docks.GetValue("1Path$i") }
+            if (-not $icon) { continue }
+            Set-ItemProperty -Path $docksKey -Name "1IconPath$i" -Value (Get-UnifiedIcon $icon) -Type String
+            $labels += $docks.GetValue("1Label$i")
+        }
+        $summary = "保留了你的 $($labels.Count) 个软件，统一了图标：$($labels -join '、')"
+    } else {
+        # 先清掉第 1 个 Dock 原有的图标，再按检测结果写入
+        foreach ($name in $docks.GetValueNames()) {
+            if ($name -match '^1[A-Za-z]+\d+$') { Remove-ItemProperty -Path $docksKey -Name $name }
+        }
+        for ($i = 0; $i -lt $apps.Count; $i++) {
+            $a = $apps[$i]
+            Set-ItemProperty -Path $docksKey -Name "1Path$i"      -Value $a.Path -Type String
+            Set-ItemProperty -Path $docksKey -Name "1Label$i"     -Value $a.Label -Type String
+            Set-ItemProperty -Path $docksKey -Name "1IconPath$i"  -Value (Get-UnifiedIcon $a.Path) -Type String
+            Set-ItemProperty -Path $docksKey -Name "1StartPath$i" -Value ((Split-Path $a.Path) + '\') -Type String
+            Set-ItemProperty -Path $docksKey -Name "1Type$i"      -Value '1' -Type String
+        }
+        # Nexus 记的是最后一个图标的序号，不是图标个数
+        Set-ItemProperty -Path $docksKey -Name 'DockNoItems1' -Value ([string]($apps.Count - 1)) -Type String
+        $summary = "放上了 $($apps.Count) 个软件：$(($apps | ForEach-Object Label) -join '、')"
     }
-    for ($i = 0; $i -lt $apps.Count; $i++) {
-        $a = $apps[$i]
-        Set-ItemProperty -Path $docksKey -Name "1Path$i"      -Value $a.Path -Type String
-        Set-ItemProperty -Path $docksKey -Name "1Label$i"     -Value $a.Label -Type String
-        Set-ItemProperty -Path $docksKey -Name "1IconPath$i"  -Value $a.Path -Type String
-        Set-ItemProperty -Path $docksKey -Name "1StartPath$i" -Value ((Split-Path $a.Path) + '\') -Type String
-        Set-ItemProperty -Path $docksKey -Name "1Type$i"      -Value '1' -Type String
-    }
-    # Nexus 记的是最后一个图标的序号，不是图标个数
-    Set-ItemProperty -Path $docksKey -Name 'DockNoItems1' -Value ([string]($apps.Count - 1)) -Type String
 } catch {
     Write-Host "导入失败：$($_.Exception.Message)"
     Write-Host '可以运行 .\apply-nexus.ps1 -Undo 恢复原来的配置。'
@@ -163,6 +205,6 @@ try {
 }
 
 Start-Nexus
-Write-Host "Dock 外观已导入，放上了 $($apps.Count) 个软件：$(($apps | ForEach-Object Label) -join '、')"
+Write-Host "Dock 外观已导入，$summary"
 Write-Host '其他软件可以直接拖到 Dock 上。想恢复原样，运行：.\apply-nexus.ps1 -Undo'
 exit 0
