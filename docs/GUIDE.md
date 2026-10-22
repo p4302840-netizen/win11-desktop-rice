@@ -8,6 +8,8 @@
 - **脚本负责**：设置任务栏和桌面、导入 Dock 外观和图标列表、设置壁纸登录后自动启动。
 - **你来完成**：安装两款软件，先打开一次 Nexus；订阅并选择壁纸，在 Wallpaper Engine 里取消「高优先级」。
 
+也可让 AI 按 [AGENTS.md](../AGENTS.md) 操作；新流程的参数见下文。购买、登录、付款和 Steam 订阅仍由用户亲自完成。
+
 ## 安装后会得到什么
 
 | 方式 | 内容 |
@@ -51,6 +53,40 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 在 Wallpaper Engine 设置里**取消勾选「高优先级」**，否则它会切回依赖后台服务启动的模式。
 
+## AI 安装与新参数（v1.2.0，尚待真机验证）
+
+推荐先检查、再安装、最后切风格：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\prepare.ps1
+# 缺少 Nexus 时才显式安装，并启动一次等待初始化：
+powershell -ExecutionPolicy Bypass -File .\scripts\prepare.ps1 -InstallNexus
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -Yes -KeepMyApps
+powershell -ExecutionPolicy Bypass -File .\scripts\set-style.ps1 -Style ink
+```
+
+| 脚本与参数 | 含义 |
+| --- | --- |
+| `prepare.ps1` | 默认只读，结果表检查 Nexus 程序及 Docks 配置、Wallpaper Engine 程序 |
+| `prepare.ps1 -InstallNexus` | 仅缺少 Nexus 时调用 winget 安装；未初始化时启动 Nexus，最多等 60 秒。无 winget、安装失败返回 1 |
+| `install.ps1 -Yes` | 跳过确认及 Dock 问答；默认保留现有软件 |
+| `-KeepMyApps` / `-ReplaceApps` | 保留软件并统一样式 / 换成检测到的常用软件，不能同时指定；不用 `-Yes` 仍会问总确认 |
+| `install.ps1 -Yes -KeepMyApps -Style ink` | 安装后调用切风格脚本，可代替最后两条命令 |
+| `set-style.ps1 -Style landscape\|ink\|cyber` | 风景 `3683255353`、水墨 `3073167683`、赛博朋克 `2447094306` |
+| `set-style.ps1 -Style ink -NoWait` | 壁纸未下载时打开 Steam 订阅页后立即返回 2，不轮询 |
+
+Wallpaper Engine 未安装时仅提供 `steam://store/431960` 并说明需要用户自己购买；已购买的用户可用 `steam://install/431960` 安装，不自动购买或判断所有权。首次启动并选择壁纸、退出一次以保存配置后再切换。
+
+未下载壁纸时会打开 `steam://url/CommunityFilePage/<ID>`，由用户点「订阅」。默认每 5 秒在所有 Steam 库下查一次，最多 3 分钟；要求 `steamapps/workshop/content/431960/<ID>/project.json` 存在且可解析。文件夹/描述文件出现不保证全部媒体已下载，需检查 Steam 下载和实际画面，超时后可重试。
+
+`prepare.ps1`：0 全部就绪，2 需要用户处理，1 执行错误。`set-style.ps1`：0 控制命令正常返回，2 缺少软件、保存的配置或下载，1 操作失败。`install.ps1`：1 有执行错误，2 仅风格步骤需用户处理；无参数时沿用原来的交互和跳过逻辑。**检查 `$LASTEXITCODE` 和结果表，并核对画面；「跳过」不等于完成，切换命令返回 0 也不证明渲染成功。**
+
+高优先级的可靠 `config.json` 字段未确认，脚本不会自动关闭它或修改服务。[官方说明](https://help.wallpaperengine.io/en/functionality/automaticstartup.html)确认该选项注册 Windows 服务；请用户在界面中关闭。切换使用[官方命令行控制](https://help.wallpaperengine.io/en/functionality/cli.html)的 `openWallpaper -file`。
+
+切换前会结束当前会话、安装目录内的 Wallpaper Engine 引擎和界面，备份磁盘上最后保存的完整 `config.json` 到 `backup/wallpaper-config-backup.json`。`wallpaper-style-backup.json` 保存安装路径、SHA256 及配置中识别到的壁纸/资源路径清单；它不是实时查询接口，未保存的界面改动不包含在内。重复切换保留首次快照。
+
+交付后的真机验证建议覆盖：无参数交互、`-Yes` 保留与替换两种策略、缺软件/首次初始化、Steam 非默认库、未订阅与超时、路径含空格、连续切换后还原、损坏备份、多显示器及高优先级仍开启的情况。不要把旧版兼容性记录当成本版验证结果。
+
 ## 换成你自己的样子
 
 - **增添软件**：把游戏或软件拖到 Dock 上；安装时选择「保留现有软件」，可以保留自己的列表并统一图标大小。
@@ -72,6 +108,9 @@ powershell -ExecutionPolicy Bypass -File .\restore.ps1
 - 任务栏和桌面的 5 项设置恢复成原来的值。
 - Nexus 配置整块恢复；恢复前先另存当前配置，万一失败会自动退回。
 - Wallpaper Engine 自启任务：原来就有的恢复原设置，原来没有的删掉。
+- 壁纸与完整 Wallpaper Engine 配置：关闭当前会话中的引擎，校验并恢复首次切换快照，再重新启动。恢复前另存 `backup/wallpaper-config-before-undo.json`；失败时保留备份。后续手动调整的引擎设置也会回退；已删除或取消订阅的原壁纸资源需要用户重新下载。
+
+还原不卸载软件、不撤销购买或订阅；高优先级未被脚本改动。备份含本机路径，请勿上传。
 
 某一步没还原成功，会显示「失败」，对应备份保留不删，可以再运行一次。
 

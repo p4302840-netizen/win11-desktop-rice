@@ -1,5 +1,17 @@
 # 更新日志
 
+## v1.2.0 · 2026-10-22
+
+- 安装新增 `-Yes`、互斥的 `-KeepMyApps` / `-ReplaceApps`、`-Style`；无参数保留交互流程，不提问模式默认保留现有软件。
+- 新增 `scripts/prepare.ps1`：只读准备检查、显式 winget 安装 Nexus、首次运行等待和结果表；不自动购买 Wallpaper Engine。
+- 新增 `scripts/set-style.ps1`：风景、水墨、赛博朋克映射，Steam 订阅提示、下载轮询和 `-NoWait`；命令执行前备份完整配置及原壁纸路径清单。
+- `restore.ps1` 增加壁纸配置恢复；首次备份不覆盖，SHA256 校验，恢复前保留当前配置。
+- 高优先级未找到可确认的配置字段，保留手动关闭提示，不修改服务。
+- 新增 AI 安装说明 `AGENTS.md`、`CLAUDE.md`，首页增加复制即用提示，指南补充参数、退出码与验证边界。
+- Dock 配置加入 `DockHideControlIcon1=True`，安装时隐藏左侧 NeXuS 标志。
+- 重启资源管理器时，自动恢复原来在运行的 TranslucentTB（之前会被一起关掉，任务栏不再透明）。
+- 真机验证：让一个全新的 AI 只凭一句话「按 AGENTS.md 安装，风格选水墨」完成了准备检查 → 安装 → 切换水墨壁纸；随后 `restore.ps1` 还原，桌面状态与安装前逐项对比 0 差异，TranslucentTB 全程保持运行。
+
 ## v1.1.0 · 2026-10-22
 
 ### 桌面打磨

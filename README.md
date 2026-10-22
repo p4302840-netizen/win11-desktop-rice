@@ -25,6 +25,10 @@
 
 </div>
 
+### 让 AI 帮你装
+把这句话复制给 AI：`帮我按照 https://github.com/p4302840-netizen/win11-desktop-rice 的 AGENTS.md 安装这个桌面，风格选水墨`
+购买、登录和 Steam 订阅需要你亲自完成。
+
 先装好 Wallpaper Engine 和 Nexus，下载本仓库，在文件夹里运行：
 
 ```powershell

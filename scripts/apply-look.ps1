@@ -31,10 +31,57 @@ function Get-Value($path, $name) {
 }
 
 function Restart-Explorer {
+    # 在此名单追加进程名即可支持其他任务栏工具；只恢复重启前已运行的工具。
+    $taskbarTools = @('TranslucentTB')
+    $runningTools = @()
+    $sessionId = (Get-Process -Id $PID).SessionId
+    foreach ($name in $taskbarTools) {
+        try {
+            $processes = @(Get-Process -Name $name -ErrorAction SilentlyContinue |
+                Where-Object { $_.SessionId -eq $sessionId })
+            if ($processes.Count -eq 0) { continue }
+
+            $appId = $null
+            try {
+                $appId = Get-StartApps -ErrorAction Stop |
+                    Where-Object { $_.AppID -match ([regex]::Escape($name)) -and $_.AppID -like '*!*' } |
+                    Select-Object -First 1 -ExpandProperty AppID
+            } catch {
+                Write-Host "无法查询 $name 的 Store AppID，将尝试记录程序路径：$($_.Exception.Message)"
+            }
+            $path = $null
+            if (-not $appId) {
+                $path = $processes | Select-Object -First 1 -ExpandProperty Path
+                if (-not $path) { throw '无法取得程序路径。' }
+            }
+            $runningTools += @{ Name = $name; AppID = $appId; Path = $path }
+        } catch {
+            Write-Host "无法记录任务栏工具 $name，请在重启后手动启动：$($_.Exception.Message)"
+        }
+    }
+
     Write-Host '正在重启资源管理器，任务栏会闪一下...'
     Stop-Process -Name explorer -Force
     Start-Sleep -Seconds 2
-    if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer }
+    if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) {
+        Start-Process explorer
+        Start-Sleep -Seconds 2
+    }
+
+    foreach ($tool in $runningTools) {
+        try {
+            # 工具若自行恢复则不重复启动。
+            if (Get-Process -Name $tool.Name -ErrorAction SilentlyContinue |
+                Where-Object { $_.SessionId -eq $sessionId }) { continue }
+            if ($tool.AppID) {
+                Start-Process -FilePath "shell:AppsFolder\$($tool.AppID)" -ErrorAction Stop
+            } else {
+                Start-Process -FilePath $tool.Path -ErrorAction Stop
+            }
+        } catch {
+            Write-Host "无法恢复任务栏工具 $($tool.Name)，请手动启动：$($_.Exception.Message)"
+        }
+    }
 }
 
 if ($Undo -and -not (Test-Path $backupFile)) { Write-Host '没有找到外观备份，无需还原。'; exit 0 }

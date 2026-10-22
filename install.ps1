@@ -10,7 +10,21 @@
 
   用法（在本文件夹里打开终端）：
     powershell -ExecutionPolicy Bypass -File .\install.ps1
+    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Yes -KeepMyApps -Style ink
+  -Yes 不提问，未指定软件策略时保留原软件；-KeepMyApps / -ReplaceApps 互斥。
 #>
+
+param(
+    [switch]$Yes,
+    [switch]$KeepMyApps,
+    [switch]$ReplaceApps,
+    [ValidateSet('landscape', 'ink', 'cyber')][string]$Style
+)
+
+if ($KeepMyApps -and $ReplaceApps) {
+    Write-Host '-KeepMyApps 和 -ReplaceApps 不能同时使用。'
+    exit 1
+}
 
 $scripts = Join-Path $PSScriptRoot 'scripts'
 . "$scripts\common.ps1"
@@ -28,7 +42,8 @@ function Invoke-Step([string]$name, [string]$script, [hashtable]$scriptArgs = @{
         Write-Host "出错：$($_.Exception.Message)"
         $ok = $false
     }
-    $results.Add([pscustomobject]@{ 步骤 = $name; 结果 = $(if ($ok) { '成功' } else { '失败' }) })
+    $code = if ($ok) { 0 } elseif ($LASTEXITCODE -eq 2) { 2 } else { 1 }
+    $results.Add([pscustomobject]@{ 步骤 = $name; 结果 = $(if ($ok) { '成功' } else { '失败' }); 退出码 = $code })
 }
 
 function Skip-Step([string]$name, [string]$reason) {
@@ -53,11 +68,15 @@ if ($nexusExe) { Write-Host '  - 导入 Nexus Dock 外观，把图标统一成�
 if ($weExe)    { Write-Host '  - 设置 Wallpaper Engine 登录后自动启动' }
 Write-Host "每一步都会先备份到 $PSScriptRoot\backup，请不要删除这个文件夹。"
 
-$answer = Read-Host "`n继续吗？(Y/N)"
-if ($answer -notmatch '^[Yy]') { Write-Host '已取消，什么都没改。'; exit 0 }
+if (-not $Yes) {
+    $answer = Read-Host "`n继续吗？(Y/N)"
+    if ($answer -notmatch '^[Yy]') { Write-Host '已取消，什么都没改。'; exit 0 }
+}
 
 $nexusArgs = @{}
-if ($nexusExe) {
+if ($KeepMyApps -or ($Yes -and -not $ReplaceApps)) {
+    $nexusArgs = @{ KeepMyApps = $true }
+} elseif ($nexusExe -and -not $ReplaceApps) {
     $keep = Read-Host "`n保留你 Dock 上现有的软件，只统一图标样式吗？(Y = 保留 / N = 换成检测到的常用软件)"
     if ($keep -match '^[Yy]') { $nexusArgs = @{ KeepMyApps = $true } }
 }
@@ -70,12 +89,16 @@ else { Skip-Step '2/3 导入 Nexus Dock' '没有安装 Nexus' }
 if ($weExe) { Invoke-Step '3/3 Wallpaper Engine 开机自启' 'fix-wallpaper-autostart.ps1' }
 else { Skip-Step '3/3 Wallpaper Engine 开机自启' '没有安装 Wallpaper Engine' }
 
+if ($Style) { Invoke-Step '切换壁纸风格' 'set-style.ps1' @{ Style = $Style } }
+
 Write-Host "`n== 结果 =="
 $results | Format-Table -AutoSize
 
 if ($results | Where-Object 结果 -eq '失败') {
     Write-Host '有步骤失败了，上面有具体原因。已完成的步骤可以用 restore.ps1 还原。'
-    exit 1
+    if ($results | Where-Object 退出码 -eq 1) { exit 1 }
+    exit 2
 }
-Write-Host '完成！去 wallpapers.md 挑一张壁纸订阅吧。想还原，运行 restore.ps1。'
+if ($Style) { Write-Host '安装和风格控制命令已执行，请核对实际桌面。想还原，运行 restore.ps1。' }
+else { Write-Host '完成！去 wallpapers.md 挑一张壁纸订阅吧。想还原，运行 restore.ps1。' }
 exit 0

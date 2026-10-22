@@ -24,6 +24,7 @@ function Invoke-Step([string]$name, [string]$script) {
 }
 
 # 每个子脚本自己判断有没有备份：没有就什么都不做
+Invoke-Step '还原壁纸和 Wallpaper Engine 配置' 'set-style.ps1'
 Invoke-Step '还原任务栏和桌面' 'apply-look.ps1'
 Invoke-Step '还原 Nexus Dock' 'apply-nexus.ps1'
 Invoke-Step '还原 Wallpaper Engine 自启' 'fix-wallpaper-autostart.ps1'

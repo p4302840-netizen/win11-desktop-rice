@@ -370,6 +370,7 @@
                  "DockFontSize1":  "14",
                  "DockFxEffect1":  "1",
                  "DockGetFocusOnActivation1":  "True",
+                 "DockHideControlIcon1":  "True",
                  "DockIconAlpha1":  "0",
                  "DockIconBounce1":  "21",
                  "DockIconShift1":  "True",
