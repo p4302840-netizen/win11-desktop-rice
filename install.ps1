@@ -2,49 +2,74 @@
   install.ps1
   一键复刻这个桌面。依次做三件事：
     1. 调整任务栏和桌面（深色、自动隐藏、隐藏桌面图标）
-    2. 导入 Nexus Dock 的外观，并把你装了的常用软件放上 Dock
+    2. 导入 Nexus Dock 的外观，并把检测到的常用软件放上 Dock
     3. 让 Wallpaper Engine 开机稳定自启
 
-  每一步都会先备份，运行 restore.ps1 可以全部还原。
+  每一步都会先备份，运行 restore.ps1 可以还原。
+  某一步失败不会影响其他步骤，最后会列出每一步的结果。
 
   用法（在本文件夹里打开终端）：
     powershell -ExecutionPolicy Bypass -File .\install.ps1
 #>
 
-$ErrorActionPreference = 'Stop'
 $scripts = Join-Path $PSScriptRoot 'scripts'
+. "$scripts\common.ps1"
 
-function Test-WallpaperEngine {
-    $steam = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
-    if (-not $steam) { return $false }
-    $libs = @($steam)
-    $vdf = Join-Path $steam 'steamapps\libraryfolders.vdf'
-    if (Test-Path $vdf) {
-        $libs += Select-String -Path $vdf -Pattern '"path"\s+"(.+)"' |
-            ForEach-Object { $_.Matches[0].Groups[1].Value -replace '\\\\', '\' }
+$results = [System.Collections.Generic.List[object]]::new()
+
+# 运行一个子脚本，按它的退出码记录成功或失败
+function Invoke-Step([string]$name, [string]$script) {
+    Write-Host "`n== $name =="
+    $global:LASTEXITCODE = 0
+    try {
+        & "$scripts\$script"
+        $ok = ($LASTEXITCODE -eq 0)
+    } catch {
+        Write-Host "出错：$($_.Exception.Message)"
+        $ok = $false
     }
-    foreach ($lib in $libs) {
-        if (Test-Path (Join-Path $lib 'steamapps\common\wallpaper_engine\wallpaper32.exe')) { return $true }
-    }
-    return $false
+    $results.Add([pscustomobject]@{ 步骤 = $name; 结果 = $(if ($ok) { '成功' } else { '失败' }) })
 }
 
-Write-Host '== 检查需要的软件 =='
-$hasWE    = Test-WallpaperEngine
-$hasNexus = Test-Path 'C:\Program Files (x86)\Winstep\Nexus.exe'
-Write-Host ("Wallpaper Engine：{0}" -f $(if ($hasWE) { '已安装' } else { '未安装（Steam 商店购买：https://store.steampowered.com/app/431960/）' }))
-Write-Host ("Nexus Dock：      {0}" -f $(if ($hasNexus) { '已安装' } else { '未安装（免费下载：https://www.winstep.net/nexus.htm）' }))
+function Skip-Step([string]$name, [string]$reason) {
+    Write-Host "`n== $name =="
+    Write-Host "跳过：$reason"
+    $results.Add([pscustomobject]@{ 步骤 = $name; 结果 = "跳过（$reason）" })
+}
 
-$answer = Read-Host "`n接下来会修改任务栏、桌面和 Dock 设置（都会先备份）。继续吗？(Y/N)"
+Write-Host '== 检查环境 =='
+$weExe    = Find-WallpaperEngine
+$nexusExe = Find-Nexus
+Write-Host ("Windows：         {0}" -f (Get-CimInstance Win32_OperatingSystem).Caption)
+Write-Host ("Wallpaper Engine：{0}" -f $(if ($weExe) { $weExe } else { '未安装（Steam 商店购买：https://store.steampowered.com/app/431960/）' }))
+Write-Host ("Nexus Dock：      {0}" -f $(if ($nexusExe) { $nexusExe } else { '未安装（免费下载：https://www.winstep.net/nexus.htm）' }))
+if (Get-ScheduledTask -TaskName WallpaperEngine_Logon -ErrorAction SilentlyContinue) {
+    Write-Host '已有计划任务 WallpaperEngine_Logon：会先完整备份，还原时恢复原样。'
+}
+
+Write-Host "`n接下来会："
+Write-Host '  - 把任务栏改成深色并自动隐藏，隐藏桌面图标'
+if ($nexusExe) { Write-Host '  - 替换 Nexus 第一个 Dock 的外观和图标列表' }
+if ($weExe)    { Write-Host '  - 设置 Wallpaper Engine 登录后自动启动' }
+Write-Host "每一步都会先备份到 $PSScriptRoot\backup，请不要删除这个文件夹。"
+
+$answer = Read-Host "`n继续吗？(Y/N)"
 if ($answer -notmatch '^[Yy]') { Write-Host '已取消，什么都没改。'; exit 0 }
 
-Write-Host "`n== 1/3 调整任务栏和桌面 =="
-& "$scripts\apply-look.ps1"
+Invoke-Step '1/3 调整任务栏和桌面' 'apply-look.ps1'
 
-Write-Host "`n== 2/3 导入 Nexus Dock =="
-if ($hasNexus) { & "$scripts\apply-nexus.ps1" } else { Write-Host '跳过：没有安装 Nexus。装好并运行一次后，可以单独运行 scripts\apply-nexus.ps1。' }
+if ($nexusExe) { Invoke-Step '2/3 导入 Nexus Dock' 'apply-nexus.ps1' }
+else { Skip-Step '2/3 导入 Nexus Dock' '没有安装 Nexus' }
 
-Write-Host "`n== 3/3 Wallpaper Engine 开机自启 =="
-if ($hasWE) { & "$scripts\fix-wallpaper-autostart.ps1" } else { Write-Host '跳过：没有安装 Wallpaper Engine。' }
+if ($weExe) { Invoke-Step '3/3 Wallpaper Engine 开机自启' 'fix-wallpaper-autostart.ps1' }
+else { Skip-Step '3/3 Wallpaper Engine 开机自启' '没有安装 Wallpaper Engine' }
 
-Write-Host "`n全部完成！去 wallpapers.md 挑一张壁纸订阅吧。想还原，运行 restore.ps1。"
+Write-Host "`n== 结果 =="
+$results | Format-Table -AutoSize
+
+if ($results | Where-Object 结果 -eq '失败') {
+    Write-Host '有步骤失败了，上面有具体原因。已完成的步骤可以用 restore.ps1 还原。'
+    exit 1
+}
+Write-Host '完成！去 wallpapers.md 挑一张壁纸订阅吧。想还原，运行 restore.ps1。'
+exit 0

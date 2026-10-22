@@ -1,0 +1,41 @@
+name: 脚本检查
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 语法检查
+        shell: powershell
+        run: |
+          $failed = $false
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors)
+            foreach ($e in $errors) { Write-Host "$($_.Name):$($e.Extent.StartLineNumber) $($e.Message)"; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+
+      - name: 中文脚本必须带 BOM（否则 Windows PowerShell 5.1 会乱码）
+        shell: powershell
+        run: |
+          $bad = Get-ChildItem -Recurse -Filter *.ps1 | Where-Object {
+            $b = [System.IO.File]::ReadAllBytes($_.FullName)
+            -not ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF)
+          }
+          $bad | ForEach-Object { Write-Host "缺少 BOM：$($_.FullName)" }
+          if ($bad) { exit 1 }
+
+      - name: PSScriptAnalyzer
+        shell: powershell
+        run: |
+          Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $results = Invoke-ScriptAnalyzer -Path . -Recurse -Settings .\PSScriptAnalyzerSettings.psd1
+          $results | Format-Table ScriptName, Line, RuleName, Message -AutoSize -Wrap
+          if ($results) { exit 1 }

@@ -4,7 +4,7 @@
 
 **动态壁纸 + macOS 风格 Dock + 隐身任务栏**
 <br>
-一个干净、会动的 Windows 11 桌面。装好两个软件，运行一个脚本，就能变得跟我的一模一样。
+一个干净、会动的 Windows 11 桌面。装好两个软件，运行一个脚本，任务栏、桌面和 Dock 就会变成演示里的样子。
 
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?style=flat-square&logo=windows&logoColor=white)
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1-5391FE?style=flat-square&logo=powershell&logoColor=white)
@@ -15,9 +15,17 @@
 
 <sub>☝️ 实录：云在飘，鼠标扫过 Dock 时图标放大</sub>
 
-[一键安装](#-一键安装) · [壁纸画廊](wallpapers.md) · [Dock 配置](#-dock-配置) · [踩坑记录](#-踩坑记录) · [还原](#-一键还原)
+[一键安装](#-一键安装) · [壁纸画廊](wallpapers.md) · [Dock 配置](#-dock-配置) · [踩坑记录](#-踩坑记录) · [还原](#-一键还原) · [更新日志](CHANGELOG.md)
 
 </div>
+
+> [!IMPORTANT]
+> **开始前请了解**
+> - **脚本自动做的**：任务栏改深色并自动隐藏、隐藏桌面图标；替换 Nexus **第一个 Dock** 的外观和图标列表；设置 Wallpaper Engine 登录后自动启动。
+> - **要你自己做的**：安装 Wallpaper Engine（付费）和 Nexus（免费），先打开一次 Nexus；订阅并选择壁纸；在 Wallpaper Engine 里取消「高优先级」。
+> - **Dock 图标**：只检测 8 款常用软件的常见安装位置，装在别处的不会自动加上，可以手动拖上去。
+> - **效果范围**：演示来自 Windows 11、2560×1440。分辨率、缩放比例和软件版本不同，效果可能略有差别。
+> - **备份与还原**：改动前会自动备份到仓库里的 `backup\` 文件夹，`restore.ps1` 按备份还原。**还原前请不要删除这个文件夹。**
 
 ---
 
@@ -67,10 +75,10 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 脚本会先检查软件装了没有，问你一次确认，然后依次：
 
 1. 把任务栏改成深色并自动隐藏，隐藏桌面图标
-2. 导入我的 Dock 外观，并**自动检测你装了哪些常用软件**放到 Dock 上（资源管理器、Edge、Chrome、QQ、微信、Steam、QQ 音乐、网易云音乐）
-3. 设置 Wallpaper Engine 登录后 10 秒自动启动
+2. 导入我的 Dock 外观，在常见安装位置检测这几款软件，装了的放到 Dock 上：资源管理器、Edge、Chrome、QQ、微信、Steam、QQ 音乐、网易云音乐
+3. 设置 Wallpaper Engine 登录后 10 秒自动启动。如果你原来就有同名的自启任务，会先完整备份
 
-全程大约 10 秒，任务栏和 Dock 会闪一下。
+全程大约 10 秒，任务栏和 Dock 会闪一下。最后会列出每一步是「成功」「跳过」还是「失败」，某一步失败不会影响其他步骤。
 
 ### 第 3 步：挑一张壁纸
 
@@ -126,6 +134,8 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\fix-wallpaper-autostart.ps1
 ```
+
+撤销这个修复，把 `.ps1` 后面加上 ` -Undo` 再运行一次就行。
 
 然后在 Wallpaper Engine 设置里**取消勾选「高优先级」**，否则它会切回依赖后台服务的模式。
 
@@ -184,13 +194,19 @@ powershell -ExecutionPolicy Bypass -File .\scripts\scan-disk.ps1
 
 ## ↩️ 一键还原
 
-不喜欢？一个命令全部恢复成安装前的样子：
+不喜欢？一个命令把脚本做的改动恢复回去：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\restore.ps1
 ```
 
-备份存在 `backup\` 文件夹里。如果你原来就有 Wallpaper Engine 的自启任务，还原时会保留它。
+它会按 `backup\` 文件夹里的备份逐项恢复：
+
+- 任务栏和桌面的 5 项设置恢复成原来的值
+- Nexus 的配置整块恢复；恢复前会先另存当前配置，万一失败会自动退回
+- Wallpaper Engine 自启任务：原来就有的恢复原设置，原来没有的删掉
+
+某一步没还原成功，会显示「失败」，对应的备份保留不删，可以再运行一次。
 
 ---
 
@@ -202,7 +218,9 @@ powershell -ExecutionPolicy Bypass -File .\restore.ps1
 ├── wallpapers.md                     壁纸画廊（14 张，带预览图）
 ├── config/
 │   └── nexus-dock.json               我的 Dock 外观配置
+├── CHANGELOG.md                      更新日志
 ├── scripts/
+│   ├── common.ps1                    公共检测函数（Steam、Wallpaper Engine、Nexus 的位置）
 │   ├── apply-look.ps1                任务栏和桌面设置
 │   ├── apply-nexus.ps1               导入 Dock 配置
 │   ├── export-nexus.ps1              导出你自己的 Dock 配置
@@ -211,13 +229,21 @@ powershell -ExecutionPolicy Bypass -File .\restore.ps1
 └── docs/                             演示动图和截图
 ```
 
-## 💻 测试环境
+## 💻 兼容性
 
-- Windows 11 家庭中文版，2560×1440
-- Windows PowerShell 5.1（系统自带）
-- Wallpaper Engine（Steam 版）、Winstep Nexus
+| 环境 | 状态 |
+| --- | --- |
+| Windows 11 家庭中文版，2560×1440，PowerShell 5.1 | ✅ 已测试：安装、重复安装、还原、备份损坏时的报错 |
+| Wallpaper Engine 装在非系统盘的 Steam 库 | ✅ 已测试 |
+| 原来已有 `WallpaperEngine_Logon` 计划任务 | ✅ 已测试：安装前备份，还原后与原任务完全一致 |
+| Windows 10 | ❓ 未验证 |
+| 英文等非中文系统 | ❓ 未验证 |
+| 多显示器、高缩放比例 | ❓ 未验证 |
+| PowerShell 7 | ❓ 未验证 |
 
-所有脚本都只改当前用户的设置，**不需要管理员权限**。
+在其他环境用过？欢迎[提个 Issue](../../issues/new/choose) 告诉我结果。
+
+所有脚本都只改**当前用户**的设置，**不需要管理员权限**，也请不要用「以管理员身份运行」：如果你平时用的不是管理员账户，用别的账户提权运行会改到那个账户的设置。
 
 ## 📄 许可
 

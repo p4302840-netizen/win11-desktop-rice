@@ -1,0 +1,29 @@
+name: 在我的电脑上能用
+description: 告诉我在什么环境下测试成功了，帮其他人判断兼容性
+labels: [compatibility]
+body:
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 版本和语言
+      placeholder: Windows 10 专业版 22H2，英文系统
+    validations:
+      required: true
+  - type: input
+    id: screen
+    attributes:
+      label: 屏幕
+      placeholder: 1920×1080，缩放 125%，单显示器
+  - type: checkboxes
+    id: tested
+    attributes:
+      label: 测试过的功能
+      options:
+        - label: install.ps1 安装
+        - label: restore.ps1 还原
+        - label: Dock 图标正常显示
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: 你的桌面截图（可选）
+      description: 欢迎晒一下！

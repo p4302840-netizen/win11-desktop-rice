@@ -7,31 +7,23 @@
     .\scan-disk.ps1
 #>
 
+. "$PSScriptRoot\common.ps1"
+
 $targets = [ordered]@{
-    '系统临时文件'          = $env:TEMP
-    '下载文件夹'            = Join-Path $env:USERPROFILE 'Downloads'
-    'Steam 创意工坊'        = $null   # 下面自动查找
-    'Wallpaper Engine 壁纸' = $null
-    'npm 缓存'              = Join-Path $env:LOCALAPPDATA 'npm-cache'
-    'pip 缓存'              = Join-Path $env:LOCALAPPDATA 'pip\Cache'
-    '微信文件'              = Join-Path $env:USERPROFILE 'Documents\WeChat Files'
-    'QQ 文件'               = Join-Path $env:USERPROFILE 'Documents\Tencent Files'
+    '系统临时文件' = $env:TEMP
+    '下载文件夹'   = Join-Path $env:USERPROFILE 'Downloads'
+    'npm 缓存'     = Join-Path $env:LOCALAPPDATA 'npm-cache'
+    'pip 缓存'     = Join-Path $env:LOCALAPPDATA 'pip\Cache'
+    '微信文件'     = Join-Path $env:USERPROFILE 'Documents\WeChat Files'
+    'QQ 文件'      = Join-Path $env:USERPROFILE 'Documents\Tencent Files'
 }
 
-$steam = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
-if ($steam) {
-    $libs = @($steam)
-    $vdf = Join-Path $steam 'steamapps\libraryfolders.vdf'
-    if (Test-Path $vdf) {
-        $libs += Select-String -Path $vdf -Pattern '"path"\s+"(.+)"' |
-            ForEach-Object { $_.Matches[0].Groups[1].Value -replace '\\\\', '\' }
-    }
-    foreach ($lib in $libs | Select-Object -Unique) {
-        $ws = Join-Path $lib 'steamapps\workshop'
-        if (Test-Path $ws) { $targets['Steam 创意工坊'] = $ws }
-        $we = Join-Path $lib 'steamapps\workshop\content\431960'
-        if (Test-Path $we) { $targets['Wallpaper Engine 壁纸'] = $we }
-    }
+# 每个 Steam 库单独列一行。Wallpaper Engine 壁纸包含在创意工坊里，单独列出方便对比
+foreach ($lib in Get-SteamLibraries) {
+    $ws = Join-Path $lib 'steamapps\workshop'
+    if (Test-Path $ws) { $targets["Steam 创意工坊（$lib）"] = $ws }
+    $we = Join-Path $lib 'steamapps\workshop\content\431960'
+    if (Test-Path $we) { $targets["  其中 Wallpaper Engine 壁纸（$lib）"] = $we }
 }
 
 function Get-FolderSize($path) {
@@ -49,7 +41,7 @@ $rows = foreach ($name in $targets.Keys) {
         位置   = $path
     }
 }
-$rows | Sort-Object 大小GB -Descending | Format-Table -AutoSize
+$rows | Format-Table -AutoSize
 
 Write-Host '各磁盘剩余空间：'
 Get-PSDrive -PSProvider FileSystem | Where-Object Used |

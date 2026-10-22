@@ -1,0 +1,48 @@
+name: 安装或还原出问题
+description: 脚本报错、效果不对、还原不回去
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 谢谢反馈！填得越具体，越快能修好。请不要贴密码、账号等隐私信息。
+  - type: input
+    id: version
+    attributes:
+      label: 使用的版本
+      description: Releases 页面的版本号，或下载 ZIP 的日期
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 版本
+      description: 按 Win+R 输入 winver 回车可以看到
+      placeholder: Windows 11 家庭中文版 24H2
+    validations:
+      required: true
+  - type: dropdown
+    id: step
+    attributes:
+      label: 哪一步出了问题
+      options:
+        - 安装：调整任务栏和桌面
+        - 安装：导入 Nexus Dock
+        - 安装：Wallpaper Engine 开机自启
+        - 还原
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: 终端输出
+      description: 把脚本运行时屏幕上的文字整段复制过来，尤其是最后的「结果」表格
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: 补充说明
+      description: 期望看到什么、实际看到什么；有截图可以直接拖进来

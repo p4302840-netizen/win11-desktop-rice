@@ -31,10 +31,11 @@ foreach ($name in $nexus.GetValueNames() | Sort-Object) {
     if ($name -match '^NeXuS') { $theme[$name] = $nexus.GetValue($name) }
 }
 
-# 只要路径里出现当前用户名，就说明混进了个人信息，停下来不导出
+# 设置里出现你的个人文件夹路径（C:\Users\你的用户名），说明混进了个人信息，停下来不导出。
+# 这只是防止明显的个人路径外泄，导出后最好再自己看一眼 json。
 $all = ($dock.Values + $theme.Values) -join "`n"
-if ($all -match [regex]::Escape($env:USERNAME)) {
-    Write-Host "导出内容里含有用户名 $env:USERNAME 的路径，已停止，请检查主题是否装在个人文件夹里。"
+if ($all.IndexOf($env:USERPROFILE, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+    Write-Host "导出内容里含有你的个人文件夹路径 $env:USERPROFILE，已停止。请检查主题是否装在个人文件夹里。"
     exit 1
 }
 

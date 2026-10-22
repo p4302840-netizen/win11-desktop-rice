@@ -37,47 +37,72 @@ function Restart-Explorer {
     if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer }
 }
 
+if ($Undo -and -not (Test-Path $backupFile)) { Write-Host '没有找到外观备份，无需还原。'; exit 0 }
+
+if (-not (Test-Path $stuckRects)) {
+    Write-Host '没有找到任务栏的设置项，这台电脑的 Windows 版本可能不支持，已停止，什么都没改。'
+    exit 1
+}
+
 if ($Undo) {
-    if (-not (Test-Path $backupFile)) { Write-Host '没有找到备份文件，无法恢复。'; exit 1 }
-    $backup = Get-Content $backupFile -Raw | ConvertFrom-Json
-    foreach ($s in $backup.Items) {
-        if ($null -eq $s.Value) {
-            Remove-ItemProperty -Path $s.Path -Name $s.Name -ErrorAction SilentlyContinue
-        } else {
-            Set-ItemProperty -Path $s.Path -Name $s.Name -Value $s.Value -Type DWord
+    try {
+        $backup = Get-Content $backupFile -Raw | ConvertFrom-Json
+        foreach ($s in $backup.Items) {
+            if (-not $s.KeyExisted) {
+                # 这个注册表项是安装时新建的，里面没别的东西就整个删掉
+                Remove-ItemProperty -Path $s.Path -Name $s.Name -ErrorAction SilentlyContinue
+                $key = Get-Item $s.Path -ErrorAction SilentlyContinue
+                if ($key -and $key.ValueCount -eq 0 -and $key.SubKeyCount -eq 0) { Remove-Item $s.Path }
+            } elseif ($null -eq $s.Value) {
+                Remove-ItemProperty -Path $s.Path -Name $s.Name -ErrorAction SilentlyContinue
+            } else {
+                Set-ItemProperty -Path $s.Path -Name $s.Name -Value $s.Value -Type DWord
+            }
         }
+        $rects = (Get-ItemProperty $stuckRects).Settings
+        $rects[8] = [byte]$backup.TaskbarAutoHide
+        Set-ItemProperty -Path $stuckRects -Name Settings -Value $rects
+        Restart-Explorer
+        Remove-Item $backupFile
+    } catch {
+        Write-Host "恢复外观设置失败：$($_.Exception.Message)"
+        exit 1
     }
-    $rects = (Get-ItemProperty $stuckRects).Settings
-    $rects[8] = [byte]$backup.TaskbarAutoHide
-    Set-ItemProperty -Path $stuckRects -Name Settings -Value $rects
-    Restart-Explorer
-    Remove-Item $backupFile
-    Write-Host '已恢复原来的设置。'
+    Write-Host '已恢复原来的外观设置。'
     exit 0
 }
 
-# 先备份当前值；已经有备份就不覆盖，保证多次运行后还能还原到最初的样子
-$rects = (Get-ItemProperty $stuckRects).Settings
-if (Test-Path $backupFile) {
-    Write-Host "已有备份 $backupFile，保留不覆盖。"
-} else {
-    New-Item -ItemType Directory -Force $backupDir | Out-Null
-    $backup = @{
-        Items = @($settings | ForEach-Object { @{ Path = $_.Path; Name = $_.Name; Value = (Get-Value $_.Path $_.Name) } })
-        TaskbarAutoHide = $rects[8]
+try {
+    # 先备份当前值；已经有备份就不覆盖，保证多次运行后还能还原到最初的样子
+    $rects = (Get-ItemProperty $stuckRects).Settings
+    if (Test-Path $backupFile) {
+        Write-Host "已有备份 $backupFile，保留不覆盖。"
+    } else {
+        New-Item -ItemType Directory -Force $backupDir | Out-Null
+        $backup = @{
+            Items = @($settings | ForEach-Object {
+                @{ Path = $_.Path; Name = $_.Name; KeyExisted = (Test-Path $_.Path); Value = (Get-Value $_.Path $_.Name) }
+            })
+            TaskbarAutoHide = $rects[8]
+        }
+        $backup | ConvertTo-Json -Depth 4 | Set-Content $backupFile -Encoding UTF8
+        Write-Host "当前设置已备份到 $backupFile"
     }
-    $backup | ConvertTo-Json -Depth 4 | Set-Content $backupFile -Encoding UTF8
-    Write-Host "当前设置已备份到 $backupFile"
+
+    foreach ($s in $settings) {
+        if (-not (Test-Path $s.Path)) { New-Item -Path $s.Path -Force | Out-Null }
+        Set-ItemProperty -Path $s.Path -Name $s.Name -Value $s.Value -Type DWord
+    }
+
+    # 自动隐藏任务栏：StuckRects3 的第 9 个字节，3 = 自动隐藏，2 = 常驻；其余字节原样保留
+    $rects[8] = 3
+    Set-ItemProperty -Path $stuckRects -Name Settings -Value $rects
+
+    Restart-Explorer
+} catch {
+    Write-Host "应用外观设置失败：$($_.Exception.Message)"
+    Write-Host '可以运行 .\apply-look.ps1 -Undo 恢复。'
+    exit 1
 }
-
-foreach ($s in $settings) {
-    if (-not (Test-Path $s.Path)) { New-Item -Path $s.Path -Force | Out-Null }
-    Set-ItemProperty -Path $s.Path -Name $s.Name -Value $s.Value -Type DWord
-}
-
-# 自动隐藏任务栏：StuckRects3 的第 9 个字节，3 = 自动隐藏，2 = 常驻
-$rects[8] = 3
-Set-ItemProperty -Path $stuckRects -Name Settings -Value $rects
-
-Restart-Explorer
 Write-Host '外观设置完成。想恢复原样，运行：.\apply-look.ps1 -Undo'
+exit 0
