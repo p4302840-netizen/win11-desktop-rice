@@ -1,6 +1,6 @@
 # 兼容性
 
-[← 返回 README](../README.md#兼容性摘要)
+[← 返回 README](../README.md)
 
 | 环境 | 状态 |
 | --- | --- |

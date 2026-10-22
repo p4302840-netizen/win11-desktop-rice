@@ -1,6 +1,6 @@
 # Dock 配置
 
-[← 返回 README](../README.md#换成你自己的样子)
+[← 返回 README](../README.md)
 
 `install.ps1` 会自动导入下面这些设置（存在 [`config/nexus-dock.json`](../config/nexus-dock.json)）。想手动调，右键 Dock → **Preferences**。
 
