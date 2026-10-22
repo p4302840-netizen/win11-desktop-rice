@@ -1,7 +1,15 @@
 ﻿<#
   common.ps1
   各脚本共用的检测函数。不要直接运行，由其他脚本用 . "$PSScriptRoot\common.ps1" 引入。
+
+  仅供自动测试：环境变量 RICE_DIRECT=1 时，Start-Detached 和 Invoke-DesktopScript
+  不经 explorer.exe 转交，直接在当前进程/会话执行。GitHub Actions 虚拟机的 Explorer
+  是否在当前会话、何时被重启都不受控制，往返测试用它避免受镜像变化影响。用户电脑上
+  不要设置它：直接执行就失去了绕开注册表隔离和进程回收的保护。
 #>
+
+# 是否处于测试用的直接执行模式（见文件开头说明）。
+function Test-DirectMode { return $env:RICE_DIRECT -eq '1' }
 
 # 经资源管理器启动常驻程序，避免受控终端退出时连同子进程一起结束。
 function Start-Detached {
@@ -23,7 +31,13 @@ function Start-Detached {
         if (-not $ProcessName) { $ProcessName = @([IO.Path]::GetFileNameWithoutExtension($target)) }
     }
     $session = (Get-Process -Id $PID).SessionId
-    & "$env:WINDIR\explorer.exe" ('"' + $target + '"')
+    if (Test-DirectMode) {
+        # 测试模式：直接启动，仍按下面的进程检查确认启动成功。
+        if ($directory) { Start-Process -FilePath $target -WorkingDirectory $directory }
+        else { Start-Process -FilePath $target }
+    } else {
+        & "$env:WINDIR\explorer.exe" ('"' + $target + '"')
+    }
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
         $running = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue | Where-Object {
@@ -47,6 +61,17 @@ function Invoke-DesktopScript {
         [hashtable]$Parameters = @{},
         [int]$TimeoutSeconds = 120
     )
+    if (Test-DirectMode) {
+        # 测试模式：在当前进程执行同一脚本，退出码含义与工作进程一致。
+        $global:LASTEXITCODE = 0
+        try {
+            & $ScriptPath @Parameters | Out-Host
+            return [int]$LASTEXITCODE
+        } catch {
+            Write-Host ($_ | Out-String)
+            return 1
+        }
+    }
     $work = Join-Path ([IO.Path]::GetTempPath()) ('desktop-rice-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $work -ErrorAction Stop | Out-Null
     $completed = $false

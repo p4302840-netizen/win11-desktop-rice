@@ -134,7 +134,19 @@ Nexus 有时开机后没跑起来，或被不小心关掉。配置还在，开�
 
 已测试环境：**Windows 11 家庭中文版、2560×1440、PowerShell 5.1**，覆盖安装、重复安装、还原、备份损坏时的报错；也测过非系统盘 Steam 库和已有同名壁纸自启任务的备份还原。
 
-Windows 10、非中文系统、多显示器、高缩放比例和 PowerShell 7 **尚未验证**。详见 [兼容性表](COMPATIBILITY.md)；在其他环境用过，欢迎[提个 Issue](../../../issues/new/choose) 告诉我结果。
+Windows 10、非中文系统、多显示器、高缩放比例和 PowerShell 7 **尚未验证**。
+
+### 自动往返测试（GitHub 虚拟机）
+
+每次 push 和 PR，`.github/workflows/roundtrip.yml` 会在 GitHub 的 `windows-latest` 虚拟机上用 Windows PowerShell 5.1 运行 `tests/test-roundtrip.ps1`，不占用任何人的电脑：
+
+- **模拟环境**：不装付费软件。编译一个什么都不做的小程序，当作 Nexus 放到 `Program Files (x86)\Winstep\Nexus.exe`，当作 Wallpaper Engine 放到假的 Steam 库；用 `reg add` 造一份 3 个软件的 Dock 配置，准备 `config.json`、水墨壁纸的 `project.json`，以及一个指向记事本的同名计划任务 `WallpaperEngine_Logon`。
+- **场景**：已有同名任务时 `install.ps1 -Yes -KeepMyApps -Style ink` → 重复安装（备份不得被覆盖）→ `restore.ps1`；没有同名任务时 `-ReplaceApps` → `restore.ps1`；两种损坏的 `backup\nexus-backup.reg`，还原必须返回非 0 且不改注册表。
+- **判定**：检查退出码和结果表；还原后 Nexus、外观、任务栏注册表，计划任务 XML 和 `config.json` 与安装前逐项比较，必须 0 差异；Dock 软件的数量和路径不得变化，Nexus 和壁纸程序还原后仍在运行。
+
+虚拟机镜像里 Explorer 是否在当前会话运行、何时被重启都不受控制，所以往返测试设置了环境变量 **`RICE_DIRECT=1`**：`Start-Detached`、`Invoke-DesktopScript` 不再经 `explorer.exe` 转交，直接在当前进程执行。**这个开关只给测试用，不要在自己电脑上设置**，否则会失去绕开注册表隔离和进程回收的保护。没设置时脚本行为与以前相同。另有一个只记录、不影响结果的诊断步骤，在虚拟机上照常经 Explorer 跑 `tests/test-desktop-launch.ps1`，用来观察转交本身在 CI 上是否可用。
+
+虚拟机测不到的仍需真机验证：Wallpaper Engine 实际切换并渲染壁纸、Nexus 真实显示和外观、Explorer 转交与注册表隔离、截图。这个测试会改当前用户的桌面设置，脚本只允许在 GitHub Actions 里运行。详见 [兼容性表](COMPATIBILITY.md)；在其他环境用过，欢迎[提个 Issue](../../../issues/new/choose) 告诉我结果。
 
 ## 致谢与许可
 
