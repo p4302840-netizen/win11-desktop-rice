@@ -1,0 +1,38 @@
+name: 安装还原往返测试
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  roundtrip:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      # 只记录虚拟机的桌面环境，帮助判断 Explorer 转交能否在 CI 上用；失败不影响结果。
+      - name: 诊断：Explorer 转交在虚拟机上能否工作（仅记录）
+        shell: powershell
+        continue-on-error: true
+        timeout-minutes: 6
+        run: |
+          Write-Host "用户：$env:USERNAME，会话：$((Get-Process -Id $PID).SessionId)，交互式：$([Environment]::UserInteractive)"
+          Get-Process explorer -ErrorAction SilentlyContinue | Format-Table Id, SessionId, Path -AutoSize
+          .\tests\test-desktop-launch.ps1
+
+      - name: 静态回归检查
+        shell: powershell
+        run: .\tests\test-review-regressions.ps1
+
+      - name: 工作进程回归检查（测试用直接执行模式）
+        shell: powershell
+        env:
+          RICE_DIRECT: '1'
+        run: .\tests\test-desktop-launch.ps1
+
+      - name: 安装 → 重复安装 → 还原，备份损坏
+        shell: powershell
+        env:
+          RICE_DIRECT: '1'
+        run: .\tests\test-roundtrip.ps1

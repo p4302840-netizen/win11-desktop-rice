@@ -49,6 +49,11 @@ function Restart-Explorer {
     $taskbarTools = @('TranslucentTB')
     $runningTools = @()
     $sessionId = (Get-Process -Id $PID).SessionId
+    # 当前会话没有资源管理器（例如自动测试的虚拟机）时，设置已写入，下次启动生效，不算失败。
+    if (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $sessionId })) {
+        Write-Host '当前会话没有运行资源管理器，跳过重启；设置会在下次启动资源管理器时生效。'
+        return
+    }
     foreach ($name in $taskbarTools) {
         try {
             $processes = @(Get-Process -Name $name -ErrorAction SilentlyContinue |
@@ -75,9 +80,11 @@ function Restart-Explorer {
     }
 
     Write-Host '正在重启资源管理器，任务栏会闪一下...'
-    Stop-Process -Name explorer -Force
+    # 只重启当前会话的资源管理器，不碰其他用户会话。
+    Get-Process -Name explorer -ErrorAction SilentlyContinue |
+        Where-Object { $_.SessionId -eq $sessionId } | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
-    if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $sessionId })) {
         # 仅在系统未自动恢复桌面 shell 时引导启动；此时没有现存 Explorer 可转交。
         Start-Process -FilePath "$env:WINDIR\explorer.exe" -WindowStyle Hidden
         Start-Sleep -Seconds 2
